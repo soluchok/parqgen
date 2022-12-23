@@ -1,0 +1,232 @@
+package querydata
+
+import (
+	"fmt"
+	"io"
+
+	"github.com/apache/arrow/go/v11/parquet"
+	"github.com/apache/arrow/go/v11/parquet/file"
+	"github.com/apache/arrow/go/v11/parquet/schema"
+)
+
+{{- $name := .Name}}
+
+type values struct {
+	values interface{}
+	defLev []int16
+	repLev []int16
+}
+
+type {{$name}}Writer struct {
+    schema *schema.Schema
+}
+
+func New{{$name}}Writer() *{{$name}}Writer {
+	_schema, err := schema.NewSchemaFromStruct(QueryData{})
+	if err != nil {
+		panic(err)
+	}
+
+	return &{{$name}}Writer{schema: _schema}
+}
+
+{{range $value := .BasicValues -}}
+{{ if $value.IsList }}
+func (s *{{$name}}Writer) _{{$value.Name}}(data []{{$name}}) values {
+	var n int
+	for i := range data {
+		for range data[i].{{$value.Name}} {
+			n++
+		}
+
+		if len(data[i].{{$value.Name}}) == 0 {
+			n++
+		}
+	}
+
+	var _values = make([]{{$value.Type}}, n)
+	var _def = make([]int16, n)
+	var _rep = make([]int16, n)
+
+	n = 0
+	var nv int
+	for i := range data {
+		for j := range data[i].{{$value.Name}} {
+			_values[nv] = {{$value.Type}}(data[i].{{$value.Name}}[j])
+			nv++
+			_def[n] = 1
+			if j != 0 {
+				_rep[n] = 1
+			}
+			n++
+		}
+
+        if len(data[i].{{$value.Name}}) == 0 {
+            n++
+        }
+	}
+
+	return values{values: _values, defLev: _def, repLev: _rep}
+}
+{{ else if $value.IsMap }}
+{{ if ne $value.Key "" }}
+func (s *{{$name}}Writer) _{{$value.Name}}_key(data []{{$name}}) values {
+	var n int
+	for i := range data {
+		for range data[i].{{$value.Name}} {
+			n++
+		}
+
+        if len(data[i].{{$value.Name}}) == 0 {
+            n++
+        }
+	}
+
+	var _values = make([]{{$value.Type}}, n)
+	var _def = make([]int16, n)
+	var _rep = make([]int16, n)
+
+	n = 0
+	var nv int
+
+	for i := range data {
+		var first = true
+		for key := range data[i].{{$value.Name}} {
+			_values[nv] = {{$value.Type}}(key)
+            nv++
+			_def[n] = 1
+			_rep[n] = 1
+
+			if first {
+				first = false
+				_rep[n] = 0
+			}
+
+			n++
+		}
+
+        if len(data[i].{{$value.Name}}) == 0 {
+            n++
+        }
+	}
+
+	return values{values: _values, defLev: _def, repLev: _rep}
+}
+{{ else }}
+func (s *{{$name}}Writer) _{{$value.Name}}_value(data []{{$name}}) values {
+	var n int
+	for i := range data {
+		for range data[i].{{$value.Name}} {
+			n++
+		}
+
+        if len(data[i].{{$value.Name}}) == 0 {
+            n++
+        }
+	}
+
+	var _values = make([]{{$value.Type}}, n)
+	var _def = make([]int16, n)
+	var _rep = make([]int16, n)
+
+	n = 0
+	var nv int
+
+	for i := range data {
+		var first = true
+		for _, val := range data[i].{{$value.Name}} {
+			_values[nv] = {{$value.Type}}(val)
+			nv++
+			_def[n] = 1
+			_rep[n] = 1
+
+			if first {
+				first = false
+				_rep[n] = 0
+			}
+
+			n++
+		}
+
+        if len(data[i].{{$value.Name}}) == 0 {
+            n++
+        }
+	}
+
+	return values{values: _values, defLev: _def, repLev: _rep}
+}
+{{ end }}
+{{ else }}
+func (s *{{$name}}Writer) _{{$value.Name}}(data []{{$name}}) values {
+	var _values = make([]{{$value.Type}}, len(data))
+	for i := range data {
+		_values[i] = {{$value.Type}}(data[i].{{$value.Name}})
+	}
+
+	return values{values: _values}
+}
+{{ end }}
+{{end -}}
+
+func (s *{{$name}}Writer) values(data []{{$name}}) []values {
+    return []values{
+	  {{- range $value := .BasicValues}}
+	    {{- if ne $value.Key ""}}
+	    s._{{$value.Name}}_key(data),
+	    {{- else if ne $value.Value ""}}
+	    s._{{$value.Name}}_value(data),
+	    {{- else}}
+	    s._{{$value.Name}}(data),
+        {{- end}}
+	  {{- end}}
+    }
+}
+
+func (s *{{$name}}Writer) Write(out io.Writer, values []QueryData) {
+	var writer = file.NewParquetWriter(out, s.schema.Root(), file.WithWriterProps(
+		parquet.NewWriterProperties(parquet.WithVersion(parquet.V1_0)),
+	))
+	defer writer.Close()
+
+	var rgw = writer.AppendRowGroup()
+	defer rgw.Close()
+
+	for _, val := range s.values(values) {
+		cw, err := rgw.NextColumn()
+		if err != nil {
+			panic(err)
+		}
+
+		switch w := cw.(type) {
+		case *file.Int64ColumnChunkWriter:
+			_, err = w.WriteBatch(val.values.([]int64), val.defLev, val.repLev)
+			if err != nil {
+				panic(err)
+			}
+		case *file.Int32ColumnChunkWriter:
+			_, err = w.WriteBatch(val.values.([]int32), val.defLev, val.repLev)
+			if err != nil {
+				panic(err)
+			}
+		case *file.ByteArrayColumnChunkWriter:
+			_, err = w.WriteBatch(val.values.([]parquet.ByteArray), val.defLev, val.repLev)
+			if err != nil {
+				panic(err)
+			}
+		case *file.Float64ColumnChunkWriter:
+			_, err = w.WriteBatch(val.values.([]float64), val.defLev, val.repLev)
+			if err != nil {
+				panic(err)
+			}
+		case *file.BooleanColumnChunkWriter:
+			_, err = w.WriteBatch(val.values.([]bool), val.defLev, val.repLev)
+			if err != nil {
+				panic(err)
+			}
+		default:
+			panic(fmt.Sprintf("unimplemented: %T", w))
+		}
+
+		cw.Close()
+	}
+}
