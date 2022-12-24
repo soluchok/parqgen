@@ -9,7 +9,7 @@ import (
 	"github.com/apache/arrow/go/v11/parquet/schema"
 )
 
-{{- $name := .Name}}
+{{- $structName := .StructName}}
 
 type values struct {
 	values interface{}
@@ -17,174 +17,155 @@ type values struct {
 	repLev []int16
 }
 
-type {{$name}}Writer struct {
-    schema *schema.Schema
+type {{$structName}}Writer struct {
+	schema *schema.Schema
+	keys   [][]interface{}
 }
 
-func New{{$name}}Writer() *{{$name}}Writer {
+func New{{$structName}}Writer() *{{$structName}}Writer {
 	_schema, err := schema.NewSchemaFromStruct(QueryData{})
 	if err != nil {
 		panic(err)
 	}
 
-	return &{{$name}}Writer{schema: _schema}
-}
+	var nodes schema.FieldList
 
-{{range $value := .BasicValues -}}
-{{ if $value.IsList }}
-func (s *{{$name}}Writer) _{{$value.Name}}(data []{{$name}}) values {
-	var n int
-	for i := range data {
-		for range data[i].{{$value.Name}} {
-			n++
-		}
-
-		if len(data[i].{{$value.Name}}) == 0 {
-			n++
-		}
+	for i := 0; i < _schema.Root().NumFields(); i++ {
+		nodes = append(nodes, _schema.Root().Field(i))
 	}
 
-	var _values = make([]{{$value.Type}}, n)
-	var _def = make([]int16, n)
-	var _rep = make([]int16, n)
+	root, err := schema.NewGroupNode(_schema.Root().Name(), parquet.Repetitions.Required, nodes, -1)
+	if err != nil {
+		panic(err)
+	}
 
-	n = 0
-	var nv int
-	for i := range data {
-		for j := range data[i].{{$value.Name}} {
-			_values[nv] = {{$value.Type}}(data[i].{{$value.Name}}[j])
-			nv++
-			_def[n] = 1
-			if j != 0 {
-				_rep[n] = 1
-			}
-			n++
-		}
+	return &{{$structName}}Writer{schema: schema.NewSchema(root)}
+}
 
-        if len(data[i].{{$value.Name}}) == 0 {
-            n++
+{{range $value := .Values -}}
+func (s *{{$structName}}Writer) _{{$value.Name}}{{$value.Path}}(data []{{$structName}}) values {
+	var n = len(data)
+
+    {{ $stackLen := len .Stack }} {{ if ne $stackLen 0 }}
+        n = 0
+        for i := range data {
+            var val0 = data[i].{{$value.Name}}
+            {{range $idx, $stackValue := .Stack -}}
+                if len(val{{$idx}}) == 0 {
+                    n++
+                }
+
+                {{ if eq $stackValue.Suffix "_mapKey" }}
+                for val{{inc $idx}} := range val{{$idx}} {
+                {{ else }}
+                for _, val{{inc $idx}} := range val{{$idx}} {
+                {{ end }}
+
+
+                    {{ if eq $stackLen (inc $idx) }}
+                        _ = val{{inc $idx}}
+                        n++
+                    {{ end }}
+            {{end -}}
+            {{range $idx, $stackValue := .Stack -}}
+                }
+            {{end -}}
         }
+    {{ end }}
+
+	var (
+		_values = make([]{{$value.Type}}, n)
+		_def    = make([]int16, n)
+		_rep    = make([]int16, n)
+	)
+
+    n = 0
+	var nv int
+_ = nv
+
+	for i := range data {
+	        {{ $stackLen := len .Stack }} {{ if ne $stackLen 0 }}
+	                var _lastRep int16
+                    var val0 = data[i].{{$value.Name}}
+
+                    {{range $idx, $stackValue := .Stack -}}
+                        {{ if eq $stackValue.Suffix "_mapValue" }}
+                            var loc{{$idx}} = s.keys[{{$idx}}]
+                        {{ end }}
+                    {{ end }}
+
+                    {{range $idx, $stackValue := .Stack -}}
+                        if len(val{{$idx}}) == 0 {
+                            n++
+                        }
+
+                        {{ if eq $stackValue.Suffix "_mapKey" }}
+                            var c{{$idx}} int
+                            for val{{inc $idx}} := range val{{$idx}} {
+                            if {{$idx}} >= len(s.keys) {
+                                s.keys = append(s.keys, make([][]interface{}, {{inc $idx}}-len(s.keys))...)
+                            }
+
+                            s.keys[{{$idx}}] = append(s.keys[{{$idx}}], val{{inc $idx}})
+
+
+                            c{{$idx}}++
+
+                        {{ else if eq $stackValue.Suffix "_mapValue"}}
+
+                                for _, val{{inc $idx}} := range val{{$idx}} {
+
+                                        val{{inc $idx}} = val{{$idx}}[loc{{$idx}}[0].(string)]
+                                        loc{{$idx}} = loc{{$idx}}[1:]
+
+                                        {{ if eq $value.Suffix "_mapValue" }}
+                                			val{{inc $idx}} = val{{$idx}}[s.keys[{{$idx}}][0].(string)]
+                                			s.keys[{{$idx}}] = s.keys[{{$idx}}][1:]
+                                        {{ end }}
+
+                        {{ else }}
+                            for _, val{{inc $idx}} := range val{{$idx}} {
+                        {{ end }}
+
+
+                            {{ if eq $stackLen (inc $idx) }}
+                               	_values[nv] = {{$value.Type}}(val{{inc $idx}})
+                                _def[n] = {{inc $idx}}
+                                _rep[n] = _lastRep
+                                _lastRep = {{inc $idx}}
+
+                                nv++
+                                n++
+                            {{ end }}
+                    {{end -}}
+                    {{range $idx, $stackValue := .Stack -}}
+                        }
+                        _lastRep--
+                    {{end -}}
+             {{ else }}
+             _values[i] = {{$value.Type}}(data[i].{{$value.Name}})
+            {{ end }}
 	}
 
 	return values{values: _values, defLev: _def, repLev: _rep}
 }
-{{ else if $value.IsMap }}
-{{ if ne $value.Key "" }}
-func (s *{{$name}}Writer) _{{$value.Name}}_key(data []{{$name}}) values {
-	var n int
-	for i := range data {
-		for range data[i].{{$value.Name}} {
-			n++
-		}
 
-        if len(data[i].{{$value.Name}}) == 0 {
-            n++
-        }
-	}
-
-	var _values = make([]{{$value.Type}}, n)
-	var _def = make([]int16, n)
-	var _rep = make([]int16, n)
-
-	n = 0
-	var nv int
-
-	for i := range data {
-		var first = true
-		for key := range data[i].{{$value.Name}} {
-			_values[nv] = {{$value.Type}}(key)
-            nv++
-			_def[n] = 1
-			_rep[n] = 1
-
-			if first {
-				first = false
-				_rep[n] = 0
-			}
-
-			n++
-		}
-
-        if len(data[i].{{$value.Name}}) == 0 {
-            n++
-        }
-	}
-
-	return values{values: _values, defLev: _def, repLev: _rep}
-}
-{{ else }}
-func (s *{{$name}}Writer) _{{$value.Name}}_value(data []{{$name}}) values {
-	var n int
-	for i := range data {
-		for range data[i].{{$value.Name}} {
-			n++
-		}
-
-        if len(data[i].{{$value.Name}}) == 0 {
-            n++
-        }
-	}
-
-	var _values = make([]{{$value.Type}}, n)
-	var _def = make([]int16, n)
-	var _rep = make([]int16, n)
-
-	n = 0
-	var nv int
-
-	for i := range data {
-		var first = true
-		for _, val := range data[i].{{$value.Name}} {
-			_values[nv] = {{$value.Type}}(val)
-			nv++
-			_def[n] = 1
-			_rep[n] = 1
-
-			if first {
-				first = false
-				_rep[n] = 0
-			}
-
-			n++
-		}
-
-        if len(data[i].{{$value.Name}}) == 0 {
-            n++
-        }
-	}
-
-	return values{values: _values, defLev: _def, repLev: _rep}
-}
-{{ end }}
-{{ else }}
-func (s *{{$name}}Writer) _{{$value.Name}}(data []{{$name}}) values {
-	var _values = make([]{{$value.Type}}, len(data))
-	for i := range data {
-		_values[i] = {{$value.Type}}(data[i].{{$value.Name}})
-	}
-
-	return values{values: _values}
-}
-{{ end }}
 {{end -}}
 
-func (s *{{$name}}Writer) values(data []{{$name}}) []values {
-    return []values{
-	  {{- range $value := .BasicValues}}
-	    {{- if ne $value.Key ""}}
-	    s._{{$value.Name}}_key(data),
-	    {{- else if ne $value.Value ""}}
-	    s._{{$value.Name}}_value(data),
-	    {{- else}}
-	    s._{{$value.Name}}(data),
-        {{- end}}
+func (s *{{$structName}}Writer) values(data []{{$structName}}) []values {
+	return []values{
+	  {{- range $value := .Values}}
+		s._{{$value.Name}}{{$value.Path}}(data),
 	  {{- end}}
-    }
+	}
 }
 
-func (s *{{$name}}Writer) Write(out io.Writer, values []QueryData) {
+func (s *{{$structName}}Writer) Write(out io.Writer, values []QueryData) {
 	var writer = file.NewParquetWriter(out, s.schema.Root(), file.WithWriterProps(
-		parquet.NewWriterProperties(parquet.WithVersion(parquet.V1_0)),
+		parquet.NewWriterProperties(
+		    parquet.WithVersion(parquet.V1_0),
+		    parquet.WithRootRepetition(parquet.Repetition(0)),
+		),
 	))
 	defer writer.Close()
 
