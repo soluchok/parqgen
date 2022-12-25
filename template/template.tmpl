@@ -19,7 +19,7 @@ type values struct {
 
 type {{$structName}}Writer struct {
 	schema *schema.Schema
-	keys   [][]interface{}
+	keys   [][][]interface{}
 }
 
 func New{{$structName}}Writer() *{{$structName}}Writer {
@@ -84,29 +84,44 @@ func (s *{{$structName}}Writer) _{{$value.Name}}{{$value.Path}}(data []{{$struct
 _ = nv
 
 	for i := range data {
+	        {{ if eq $value.Suffix "_mapKey" }}
+	        		if i >= len(s.keys) {
+            			s.keys = append(s.keys, [][]interface{}{})
+            		}
+            {{ end }}
+
 	        {{ $stackLen := len .Stack }} {{ if ne $stackLen 0 }}
 	                var _lastRep int16
                     var val0 = data[i].{{$value.Name}}
 
                     {{range $idx, $stackValue := .Stack -}}
                         {{ if eq $stackValue.Suffix "_mapValue" }}
-                            var loc{{$idx}} = s.keys[{{$idx}}]
+
+
+                            		var loc{{$idx}} []interface{}
+                            		if len(s.keys[i]) > {{$idx}} {
+                            			loc{{$idx}} = s.keys[i][{{$idx}}]
+                            		}
+
                         {{ end }}
                     {{ end }}
 
                     {{range $idx, $stackValue := .Stack -}}
                         if len(val{{$idx}}) == 0 {
+                            _def[n] = {{$idx}}
+                            _rep[n] = _lastRep
+                            _lastRep = {{inc $idx}}
                             n++
                         }
 
                         {{ if eq $stackValue.Suffix "_mapKey" }}
                             var c{{$idx}} int
                             for val{{inc $idx}} := range val{{$idx}} {
-                            if {{$idx}} >= len(s.keys) {
-                                s.keys = append(s.keys, make([][]interface{}, {{inc $idx}}-len(s.keys))...)
+                            if {{$idx}} >= len(s.keys[i]) {
+                                s.keys[i] = append(s.keys[i], make([][]interface{}, {{inc $idx}}-len(s.keys[i]))...)
                             }
 
-                            s.keys[{{$idx}}] = append(s.keys[{{$idx}}], val{{inc $idx}})
+                            s.keys[i][{{$idx}}] = append(s.keys[i][{{$idx}}], val{{inc $idx}})
 
 
                             c{{$idx}}++
@@ -119,8 +134,8 @@ _ = nv
                                         loc{{$idx}} = loc{{$idx}}[1:]
 
                                         {{ if eq $value.Suffix "_mapValue" }}
-                                			val{{inc $idx}} = val{{$idx}}[s.keys[{{$idx}}][0].(string)]
-                                			s.keys[{{$idx}}] = s.keys[{{$idx}}][1:]
+                                			val{{inc $idx}} = val{{$idx}}[s.keys[i][{{$idx}}][0].(string)]
+                                			s.keys[i][{{$idx}}] = s.keys[i][{{$idx}}][1:]
                                         {{ end }}
 
                         {{ else }}
