@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	_ "embed"
 	"flag"
 	"fmt"
 	"go/ast"
@@ -13,9 +14,15 @@ import (
 	"text/template"
 )
 
-var source = flag.String("source", "examples/querydata/querydata.go", "")
-var typeName = flag.String("type", "QueryData", "")
-var destination = flag.String("destination", "examples/querydata/querydata_gen.go", "")
+//go:embed template/template.tmpl
+var tmplSrc string
+
+var (
+	source      = flag.String("source", "", "")
+	destination = flag.String("destination", "", "")
+	typeName    = flag.String("type", "", "")
+	packageName = flag.String("package", "", "")
+)
 
 type Value struct {
 	Name   string
@@ -40,17 +47,17 @@ func (v Value) copy() Value {
 }
 
 type Info struct {
-	StructName string
-	Values     []Value
+	TypeName    string
+	PackageName string
+	Values      []Value
 }
 
 func main() {
-	flag.Parse()
+	checkFlags()
 
-	var tfs = token.NewFileSet()
-	file, err := parser.ParseFile(tfs, *source, nil, parser.ParseComments)
+	file, err := parser.ParseFile(token.NewFileSet(), *source, nil, parser.ParseComments)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
 	var info *Info
@@ -70,45 +77,35 @@ func main() {
 			return true
 		}
 
-		info = &Info{StructName: ts.Name.String()}
+		info = &Info{TypeName: ts.Name.String(), PackageName: *packageName}
 
 		for _, field := range _x.Fields.List {
-
-			var values = process(Value{}, field, field.Type)
-
-			info.Values = append(info.Values, values...)
+			info.Values = append(info.Values, process(Value{}, field, field.Type)...)
 		}
 
 		return false
 	})
 
-	_tmpl := template.New("template.tmpl").Funcs(template.FuncMap{
+	tmpl, err := template.New("template").Funcs(template.FuncMap{
 		"inc": func(n int) int {
 			return n + 1
 		},
-	})
-
-	for i := range info.Values {
-		fmt.Println(info.Values[i])
-	}
-	tmpl, err := _tmpl.ParseFiles("template/template.tmpl")
+	}).Parse(tmplSrc)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	var doc bytes.Buffer
-	if err = tmpl.Execute(&doc, info); err != nil {
+	var goCode bytes.Buffer
+	if err = tmpl.Execute(&goCode, info); err != nil {
 		log.Fatal(err)
 	}
 
-	//formated := doc.Bytes()
-
-	formated, err := format.Source(doc.Bytes())
+	formattedGoCode, err := format.Source(goCode.Bytes())
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	if err = os.WriteFile(*destination, formated, 0600); err != nil {
+	if err = os.WriteFile(*destination, formattedGoCode, 0600); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -164,6 +161,26 @@ func process(val Value, field *ast.Field, expr ast.Expr) []Value {
 	}
 
 	panic(fmt.Sprintf("not supported: %T", field.Type))
+}
+
+func checkFlags() {
+	flag.Parse()
+
+	if len(*source) == 0 {
+		log.Fatal("source was not provided --source file.go")
+	}
+
+	if len(*destination) == 0 {
+		log.Fatal("destination was not provided --destination file_gen.go")
+	}
+
+	if len(*typeName) == 0 {
+		log.Fatal("type was not provided --type TypeName")
+	}
+
+	if len(*packageName) == 0 {
+		log.Fatal("package was not provided --package pkg")
+	}
 }
 
 func toParquetType(v string) string {

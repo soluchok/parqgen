@@ -1,4 +1,4 @@
-package querydata
+package {{.PackageName}}
 
 import (
 	"fmt"
@@ -9,7 +9,7 @@ import (
 	"github.com/apache/arrow/go/v11/parquet/schema"
 )
 
-{{- $structName := .StructName}}
+{{- $structName := .TypeName}}
 
 type values struct {
 	values interface{}

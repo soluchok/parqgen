@@ -1,5 +1,7 @@
 package querydata
 
+//go:generate go run ../../main.go -source querydata.go -destination querydata_gen.go -type QueryData -package querydata
+
 type QueryData struct {
 	Col1  string
 	Col2  []string
