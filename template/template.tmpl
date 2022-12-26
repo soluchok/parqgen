@@ -3,6 +3,8 @@ package {{.PackageName}}
 import (
 	"fmt"
 	"io"
+	"reflect"
+	"unsafe"
 
 	"github.com/apache/arrow/go/v11/parquet"
 	"github.com/apache/arrow/go/v11/parquet/file"
@@ -18,12 +20,23 @@ type values struct {
 }
 
 type {{$structName}}Writer struct {
-	schema *schema.Schema
-	keys   [][][]interface{}
+	schema      *schema.Schema
+	properties []WriterProperty
+	keys        [][][]interface{}
 }
 
-func New{{$structName}}Writer() *{{$structName}}Writer {
-	_schema, err := schema.NewSchemaFromStruct(QueryData{})
+type WriterProperty = parquet.WriterProperty
+
+func WithDictionaryFor(path string, dict bool) WriterProperty {
+	return parquet.WithDictionaryFor(path, dict)
+}
+
+func WithDataPageSize(pgsize int64) WriterProperty {
+	return parquet.WithDataPageSize(pgsize)
+}
+
+func New{{$structName}}Writer(opts ...WriterProperty) *{{$structName}}Writer {
+	_schema, err := schema.NewSchemaFromStruct({{$structName}}{})
 	if err != nil {
 		panic(err)
 	}
@@ -39,153 +52,154 @@ func New{{$structName}}Writer() *{{$structName}}Writer {
 		panic(err)
 	}
 
-	return &{{$structName}}Writer{schema: schema.NewSchema(root)}
+    var properties = []WriterProperty{
+        parquet.WithVersion(parquet.V1_0),
+        parquet.WithRootRepetition(parquet.Repetition(0)),
+        parquet.WithDictionaryDefault(false),
+    }
+
+	return &{{$structName}}Writer{schema: schema.NewSchema(root), properties: append(properties, opts...)}
 }
 
-{{range $value := .Values -}}
-func (s *{{$structName}}Writer) _{{$value.Name}}{{$value.Path}}(data []{{$structName}}) values {
-	var n = len(data)
-
-    {{ $stackLen := len .Stack }} {{ if ne $stackLen 0 }}
-        n = 0
-        for i := range data {
-            var val0 = data[i].{{$value.Name}}
-            {{range $idx, $stackValue := .Stack -}}
-                if len(val{{$idx}}) == 0 {
-                    n++
-                }
-
-                {{ if eq $stackValue.Suffix "_mapKey" }}
-                for val{{inc $idx}} := range val{{$idx}} {
-                {{ else }}
-                for _, val{{inc $idx}} := range val{{$idx}} {
-                {{ end }}
-
-
-                    {{ if eq $stackLen (inc $idx) }}
-                        _ = val{{inc $idx}}
-                        n++
-                    {{ end }}
-            {{end -}}
-            {{range $idx, $stackValue := .Stack -}}
-                }
-            {{end -}}
-        }
-    {{ end }}
-
-	var (
-		_values = make([]{{$value.Type}}, n)
-		_def    = make([]int16, n)
-		_rep    = make([]int16, n)
-	)
-
-    n = 0
-	var nv int
-_ = nv
-
-	for i := range data {
-	        {{ if eq $value.Suffix "_mapKey" }}
-	        		if i >= len(s.keys) {
-            			s.keys = append(s.keys, [][]interface{}{})
-            		}
-            {{ end }}
-
-	        {{ $stackLen := len .Stack }} {{ if ne $stackLen 0 }}
-	                var _lastRep int16
-                    var val0 = data[i].{{$value.Name}}
-
-                    {{range $idx, $stackValue := .Stack -}}
-                        {{ if eq $stackValue.Suffix "_mapValue" }}
-
-
-                            		var loc{{$idx}} []interface{}
-                            		if len(s.keys[i]) > {{$idx}} {
-                            			loc{{$idx}} = s.keys[i][{{$idx}}]
-                            		}
-
-                        {{ end }}
-                    {{ end }}
-
-                    {{range $idx, $stackValue := .Stack -}}
-                        if len(val{{$idx}}) == 0 {
-                            _def[n] = {{$idx}}
-                            _rep[n] = _lastRep
-                            _lastRep = {{inc $idx}}
-                            n++
-                        }
-
-                        {{ if eq $stackValue.Suffix "_mapKey" }}
-                            var c{{$idx}} int
-                            for val{{inc $idx}} := range val{{$idx}} {
-                            if {{$idx}} >= len(s.keys[i]) {
-                                s.keys[i] = append(s.keys[i], make([][]interface{}, {{inc $idx}}-len(s.keys[i]))...)
-                            }
-
-                            s.keys[i][{{$idx}}] = append(s.keys[i][{{$idx}}], val{{inc $idx}})
-
-
-                            c{{$idx}}++
-
-                        {{ else if eq $stackValue.Suffix "_mapValue"}}
-
-                                for _, val{{inc $idx}} := range val{{$idx}} {
-
-                                        val{{inc $idx}} = val{{$idx}}[loc{{$idx}}[0].(string)]
-                                        loc{{$idx}} = loc{{$idx}}[1:]
-
-                                        {{ if eq $value.Suffix "_mapValue" }}
-                                			val{{inc $idx}} = val{{$idx}}[s.keys[i][{{$idx}}][0].(string)]
-                                			s.keys[i][{{$idx}}] = s.keys[i][{{$idx}}][1:]
-                                        {{ end }}
-
-                        {{ else }}
-                            for _, val{{inc $idx}} := range val{{$idx}} {
-                        {{ end }}
-
-
-                            {{ if eq $stackLen (inc $idx) }}
-                               	_values[nv] = {{$value.Type}}(val{{inc $idx}})
-                                _def[n] = {{inc $idx}}
-                                _rep[n] = _lastRep
-                                _lastRep = {{inc $idx}}
-
-                                nv++
-                                n++
-                            {{ end }}
-                    {{end -}}
-                    {{range $idx, $stackValue := .Stack -}}
-                        }
-                        _lastRep--
-                    {{end -}}
-             {{ else }}
-             _values[i] = {{$value.Type}}(data[i].{{$value.Name}})
-            {{ end }}
+func unsafeByteArray(s string) parquet.ByteArray {
+	if len(s) == 0 {
+		return nil
 	}
 
-	return values{values: _values, defLev: _def, repLev: _rep}
+	return (*[0x7fff0000]byte)(unsafe.Pointer(
+		(*reflect.StringHeader)(unsafe.Pointer(&s)).Data),
+	)[:len(s):len(s)]
 }
 
-{{end -}}
+{{range $value := .Values}}
+	func (s *{{$structName}}Writer) _{{$value.Path}}(data []{{$structName}}) values {
+		{{ $hasStack := ne (len .Stack) 0 }}
+
+		{{- if not $hasStack -}}
+			var _values = make([]{{$value.Type}}, len(data))
+
+			for i := range data {
+				{{- if eq $value.Type "parquet.ByteArray" -}}
+					_values[i] = unsafeByteArray(data[i].{{$value.FieldName}})
+				{{- else -}}
+					_values[i] =  data[i].{{$value.FieldName}}
+				{{- end -}}
+			}
+
+			return values{values: _values}
+		{{ else -}}
+			var num int
+			for i := range data {
+				var val0 = data[i].{{$value.FieldName}}
+				{{range $idx, $stackValue := .Stack -}}
+					if len(val{{$idx}}) == 0 {
+						num++
+						continue
+					}
+
+					{{ if eq (len $value.Stack) (inc $idx) }}
+						num += len(val{{$idx}})
+					{{- else }}
+						for _, val{{inc $idx}} := range val{{$idx}} {
+					{{ end -}}
+				{{ end }}
+
+				{{- range $idx, $stackValue := .Stack -}}
+					{{- if ne (len $value.Stack) (inc $idx) }}
+						}
+					{{- end -}}
+				{{ end }}
+			}
+
+			var (
+				_values = make([]{{$value.Type}}, num)
+				_def    = make([]int16, num)
+				_rep    = make([]int16, num)
+			)
+
+			var n, nv int
+
+			for i := range data {
+				var _lastRep int16
+				var val0 = data[i].{{$value.FieldName}}
+
+				{{range $idx, $stackValue := .Stack -}}
+					{{ if eq $stackValue.Type "MapValue" }}
+						var loc{{$idx}} []interface{}
+						if len(s.keys[i]) > {{$idx}} {
+							loc{{$idx}} = s.keys[i][{{$idx}}]
+						}
+					{{ end }}
+				{{ end }}
+
+				{{range $idx, $stackValue := .Stack -}}
+					if len(val{{$idx}}) == 0 {
+						_def[n], _rep[n], _lastRep = {{$idx}}, _lastRep, {{inc $idx}}
+						n++
+					}
+
+					{{ if eq $stackValue.Type "MapKey" }}
+						for val{{inc $idx}} := range val{{$idx}} {
+							if {{$idx}} >= len(s.keys[i]) {
+								s.keys[i] = append(s.keys[i], make([][]interface{}, {{inc $idx}}-len(s.keys[i]))...)
+							}
+
+							s.keys[i][{{$idx}}] = append(s.keys[i][{{$idx}}], val{{inc $idx}})
+					{{ else if eq $stackValue.Type "MapValue"}}
+						for _, val{{inc $idx}} := range val{{$idx}} {
+							val{{inc $idx}}, loc{{$idx}} = val{{$idx}}[loc{{$idx}}[0].(string)], loc{{$idx}}[1:]
+					{{ else }}
+						for _, val{{inc $idx}} := range val{{$idx}} {
+					{{ end }}
+
+					{{- if eq (len $value.Stack) (inc $idx) -}}
+
+						{{ if eq $value.Type "parquet.ByteArray" }}
+							_values[nv] = unsafeByteArray(val{{inc $idx}})
+						{{ else }}
+							_values[nv] =  val{{inc $idx}}
+						{{ end }}
+
+						_def[n], _rep[n], _lastRep = {{inc $idx}}, _lastRep, {{inc $idx}}
+
+						nv++
+						n++
+					{{- end -}}
+				{{end -}}
+
+				{{- range $idx, $stackValue := .Stack -}}
+					}
+					_lastRep--
+				{{- end -}}
+
+				{{ if $value.ReleaseKeys }}
+					s.keys[i] = s.keys[i][len(s.keys[i]):]
+				{{- end }}
+			}
+
+			return values{values: _values, defLev: _def, repLev: _rep}
+		{{ end -}}
+	}
+{{end}}
 
 func (s *{{$structName}}Writer) values(data []{{$structName}}) []values {
 	return []values{
 	  {{- range $value := .Values}}
-		s._{{$value.Name}}{{$value.Path}}(data),
+		s._{{$value.Path}}(data),
 	  {{- end}}
 	}
 }
 
-func (s *{{$structName}}Writer) Write(out io.Writer, values []QueryData) {
+func (s *{{$structName}}Writer) Write(out io.Writer, values []{{$structName}}) {
 	var writer = file.NewParquetWriter(out, s.schema.Root(), file.WithWriterProps(
-		parquet.NewWriterProperties(
-		    parquet.WithVersion(parquet.V1_0),
-		    parquet.WithRootRepetition(parquet.Repetition(0)),
-		),
+		parquet.NewWriterProperties(s.properties...),
 	))
 	defer writer.Close()
 
 	var rgw = writer.AppendRowGroup()
 	defer rgw.Close()
+
+    s.keys = make([][][]interface{}, len(values))
 
 	for _, val := range s.values(values) {
 		cw, err := rgw.NextColumn()

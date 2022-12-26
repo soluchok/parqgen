@@ -4,7 +4,9 @@ go 1.19
 
 require (
 	github.com/apache/arrow/go/v11 v11.0.0-20221222151525-ff1002056ec3
+	github.com/inigolabs/parquet v0.0.0-20221219163044-197467a3c60a
 	github.com/stretchr/testify v1.8.0
+	github.com/valyala/bytebufferpool v1.0.0
 	github.com/xitongsys/parquet-go v1.6.2
 	github.com/xitongsys/parquet-go-source v0.0.0-20221025031416-9877e685ef65
 )

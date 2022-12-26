@@ -1,0 +1,122 @@
+{
+  "Tag": "name=parquet_go_root, repetitiontype=REQUIRED",
+  "Fields": [
+    {"Tag": "name=id, inname=ID, type=INT64, convertedtype=INT_64"},
+    {"Tag": "name=org_name, inname=OrgName, type=BYTE_ARRAY, convertedtype=UTF8"},
+    {"Tag": "name=trace_id, inname=TraceID, type=BYTE_ARRAY, convertedtype=UTF8, repetitiontype=REQUIRED"},
+    {"Tag": "name=service_id, inname=ServiceID, type=INT64, convertedtype=INT_64"},
+    {"Tag": "name=service_name, inname=ServiceName, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"},
+    {"Tag": "name=service_label, inname=ServiceLabel, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"},
+    {"Tag": "name=observed_at, inname=ObservedAt, type=INT64, convertedtype=TIMESTAMP_MILLIS"},
+    {"Tag": "name=client_addr, inname=ClientAddr, type=BYTE_ARRAY, convertedtype=UTF8"},
+    {"Tag": "name=client_version, inname=ClientVersion, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"},
+    {"Tag": "name=user_id, inname=UserID, type=BYTE_ARRAY, encoding=PLAIN_DICTIONARY"},
+    {"Tag": "name=profile, inname=Profile, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"},
+    {
+      "Tag": "name=roles, inname=Roles, type=LIST",
+      "Fields": [
+        {"Tag": "name=element, type=BYTE_ARRAY, valueconvertedtype=UTF8"}
+      ]
+    },
+    {"Tag": "name=operation_type, inname=OperationType, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY, repetitiontype=REQUIRED"},
+    {"Tag": "name=operation_name, inname=OperationName, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY, repetitiontype=REQUIRED"},
+    {"Tag": "name=query_hash, inname=QueryHash, type=BYTE_ARRAY, convertedtype=UTF8"},
+    {"Tag": "name=query_input, inname=QueryInput, type=BYTE_ARRAY, convertedtype=UTF8"},
+    {"Tag": "name=query_output, inname=QueryOutput, type=BYTE_ARRAY, convertedtype=UTF8"},
+    {"Tag": "name=depth, inname=Depth, type=INT32"},
+    {"Tag": "name=height, inname=Height, type=INT32"},
+    {"Tag": "name=directives, inname=Directives, type=INT32"},
+    {"Tag": "name=request_size, inname=RequestSize, type=INT32"},
+    {"Tag": "name=response_size, inname=ResponseSize, type=INT32"},
+    {"Tag": "name=count_total, inname=CountTotal, type=INT32"},
+    {"Tag": "name=credit_left, inname=CreditLeft, type=INT32"},
+    {"Tag": "name=credit_left_per_minute, inname=CreditLeftPerMinute, type=INT32"},
+    {"Tag": "name=credit_left_per_hour, inname=CreditLeftPerHour, type=INT32"},
+    {"Tag": "name=calls_left_per_minute, inname=CallsLeftPerMinute, type=INT32"},
+    {"Tag": "name=calls_left_per_hour, inname=CallsLeftPerHour, type=INT32"},
+    {"Tag": "name=duration, inname=Duration, type=DOUBLE, repetitiontype=REQUIRED"},
+    {"Tag": "name=sidecar_process_time, inname=SidecarProcessTime, type=DOUBLE, repetitiontype=REQUIRED"},
+    {"Tag": "name=server_process_time, inname=ServerProcessTime, type=DOUBLE, repetitiontype=REQUIRED"},
+    {"Tag": "name=status, inname=Status, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY, repetitiontype=REQUIRED"},
+    {"Tag": "name=internal_reason, inname=InternalReason, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"},
+    {
+      "Tag": "name=type_counts, inname=TypeCounts, type=MAP, convertedtype=MAP, repetitiontype=REQUIRED",
+      "Fields": [
+        {"Tag": "name=key, type=BYTE_ARRAY, convertedtype=UTF8, repetitiontype=REQUIRED"},
+        {"Tag": "name=value, type=INT32, repetitiontype=REQUIRED"}
+      ]
+    },
+    {
+      "Tag": "name=field_counts, inname=FieldCounts, type=MAP, convertedtype=MAP, repetitiontype=REQUIRED",
+      "Fields": [
+        {"Tag": "name=key, type=BYTE_ARRAY, convertedtype=UTF8, repetitiontype=REQUIRED"},
+        {"Tag": "name=value, type=INT32, repetitiontype=REQUIRED"}
+      ]
+    },
+    {
+      "Tag": "name=path_counts, inname=PathCounts, type=MAP, convertedtype=MAP, repetitiontype=REQUIRED",
+      "Fields": [
+        {"Tag": "name=key, type=BYTE_ARRAY, convertedtype=UTF8, repetitiontype=REQUIRED"},
+        {"Tag": "name=value, type=INT32, repetitiontype=REQUIRED"}
+      ]
+    },
+    {
+      "Tag": "name=field_time, inname=FieldTime, type=MAP, convertedtype=MAP, repetitiontype=REQUIRED",
+      "Fields": [
+        {"Tag": "name=key, type=BYTE_ARRAY, convertedtype=UTF8, repetitiontype=REQUIRED"},
+        {"Tag": "name=value, type=INT64, repetitiontype=REQUIRED"}
+      ]
+    },
+    {
+      "Tag": "name=path_time, inname=PathTime, type=MAP, convertedtype=MAP, repetitiontype=REQUIRED",
+      "Fields": [
+        {"Tag": "name=key, type=BYTE_ARRAY, convertedtype=UTF8, repetitiontype=REQUIRED"},
+        {"Tag": "name=value, type=INT64, repetitiontype=REQUIRED"}
+      ]
+    },
+    {"Tag": "name=has_errors, inname=HasErrors, type=BOOLEAN"},
+    {
+      "Tag": "name=errors, inname=Errors, type=LIST",
+      "Fields": [
+        {
+          "Tag": "name=element, type=MAP",
+          "Fields": [
+            {"Tag": "name=key, type=BYTE_ARRAY, convertedtype=UTF8, repetitiontype=REQUIRED"},
+            {
+              "Tag": "name=value, type=LIST",
+              "Fields": [
+                {"Tag": "name=element, type=BYTE_ARRAY, convertedtype=UTF8"}
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Tag": "name=error_reasons_map, inname=ErrorReasonsMap, type=MAP",
+      "Fields": [
+        {"Tag": "name=key, type=BYTE_ARRAY, convertedtype=UTF8, repetitiontype=REQUIRED"},
+        {
+          "Tag": "name=value, type=LIST",
+          "Fields": [
+            {"Tag": "name=element, type=INT32"}
+          ]
+        }
+      ]
+    },
+    {"Tag": "name=internal_error, inname=InternalError, type=BYTE_ARRAY, convertedtype=UTF8"},
+    {"Tag": "name=internal_stack, inname=InternalStack, type=BYTE_ARRAY, convertedtype=UTF8"},
+    {
+      "Tag": "name=stopwatch, inname=Stopwatch, type=LIST",
+      "Fields": [
+        {
+          "Tag": "name=element, type=MAP",
+          "Fields": [
+            {"Tag": "name=key, type=BYTE_ARRAY, convertedtype=UTF8, repetitiontype=REQUIRED"},
+            {"Tag": "name=value, type=INT64"}
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -25,11 +25,11 @@ var (
 )
 
 type Value struct {
-	Name   string
-	Path   string
-	Type   string
-	Suffix string
-	Stack  []Value
+	FieldName   string
+	Path        string
+	Type        string
+	ReleaseKeys bool
+	Stack       []Value
 }
 
 func (v Value) copy() Value {
@@ -38,11 +38,11 @@ func (v Value) copy() Value {
 	copy(stack, v.Stack)
 
 	return Value{
-		Name:   v.Name,
-		Type:   v.Type,
-		Suffix: v.Suffix,
-		Path:   v.Path,
-		Stack:  stack,
+		FieldName:   v.FieldName,
+		Type:        v.Type,
+		ReleaseKeys: v.ReleaseKeys,
+		Path:        v.Path,
+		Stack:       stack,
 	}
 }
 
@@ -80,7 +80,7 @@ func main() {
 		info = &Info{TypeName: ts.Name.String(), PackageName: *packageName}
 
 		for _, field := range _x.Fields.List {
-			info.Values = append(info.Values, process(Value{}, field, field.Type)...)
+			info.Values = append(info.Values, process(Value{Path: field.Names[0].Name}, field, field.Type)...)
 		}
 
 		return false
@@ -113,7 +113,7 @@ func main() {
 func process(val Value, field *ast.Field, expr ast.Expr) []Value {
 	ident, ok := expr.(*ast.Ident)
 	if ok {
-		val.Name = field.Names[0].Name
+		val.FieldName = field.Names[0].Name
 		val.Type = toParquetType(ident.Name)
 
 		return []Value{val}
@@ -122,8 +122,8 @@ func process(val Value, field *ast.Field, expr ast.Expr) []Value {
 	arrayType, ok := expr.(*ast.ArrayType)
 	if ok {
 		val.Stack = append(val.Stack, Value{
-			Name: field.Names[0].Name,
-			Type: "ArrayType",
+			FieldName: field.Names[0].Name,
+			Type:      "Array",
 		})
 
 		return process(val, field, arrayType.Elt)
@@ -136,22 +136,18 @@ func process(val Value, field *ast.Field, expr ast.Expr) []Value {
 			valVal = val.copy()
 		)
 
-		keyVal.Suffix = "_mapKey"
+		keyVal.ReleaseKeys = false
 		keyVal.Path += "_mapKey"
 		keyVal.Stack = append(keyVal.Stack, Value{
-			Name:   field.Names[0].Name,
-			Type:   "MapType",
-			Suffix: "_mapKey",
-			Path:   "_mapKey",
+			FieldName: field.Names[0].Name,
+			Type:      "MapKey",
 		})
 
-		valVal.Suffix = "_mapValue"
+		valVal.ReleaseKeys = true
 		valVal.Path += "_mapValue"
 		valVal.Stack = append(valVal.Stack, Value{
-			Name:   field.Names[0].Name,
-			Type:   "MapType",
-			Suffix: "_mapValue",
-			Path:   "_mapValue",
+			FieldName: field.Names[0].Name,
+			Type:      "MapValue",
 		})
 
 		return append(

@@ -1,4 +1,4 @@
-package querydata
+package recursivemap
 
 import (
 	"encoding/json"
@@ -11,13 +11,12 @@ import (
 
 func TestQueryDataWriter_Write(t *testing.T) {
 	var (
-		qdw = NewQueryDataWriter()
+		qdw = NewRecursiveMapWriter()
 		out = buffer.NewBufferFile()
 	)
 
-	var input = []QueryData{
+	var input = []RecursiveMap{
 		{
-			Col1:  "",
 			Col2:  []string{},
 			Col3:  [][]string{},
 			Col4:  [][][]string{},
@@ -614,7 +613,7 @@ func TestQueryDataWriter_Write(t *testing.T) {
 	pr, err := reader.NewParquetReader(out, nil, 1)
 	require.NoError(t, err)
 
-	output := make([]QueryData, int(pr.GetNumRows()))
+	output := make([]RecursiveMap, int(pr.GetNumRows()))
 	require.NoError(t, pr.Read(&output))
 
 	expected, err := json.Marshal(input)
